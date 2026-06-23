@@ -6,7 +6,7 @@
 
 // Good sources here!!!!
 // https://github.com/DFRobot/DFRobot_GDL/blob/master/examples/Touch_ST7365P_320x480/rotating/rotating.ino
-
+// https://github.com/DFRobot/DFRobot_GDL/wiki/English-WIKI
 
 // --- PIN allocation ---
 #define TFT_DC    D2    
@@ -25,21 +25,47 @@ DFRobot_Touch_GT911_IPS touch(0X5D,TOUCH_RST,TOUCH_INT);
 DFRobot_ST7365P_320x480_HW_SPI screen(TFT_DC, TFT_CS, TFT_RST);
 DFRobot_UI ui(&screen, &touch);
 
+// Switch screen off
+void screenOff() {
+  analogWrite(TFT_BL, 0);
+}
+
+// Switch screen on
+void screenOn() {
+  analogWrite(TFT_BL, 128);
+}
+
 void display_init() {
   ui.begin();
   Serial.println("ui.begin() done");
 
   pinMode(TFT_BL, OUTPUT);
-  analogWrite(TFT_BL, 128);  // 50% brightness (255 max, 128 half, 0 off)
+  analogWrite(TFT_BL, 70);  // 50% brightness (255 max, 128 half, 0 off)
 
   touch.setRotation(-1);
   screen.setRotation(-1);
 
   ui.setTheme(DFRobot_UI::MODERN);
-  Serial.println("set theme done");
+
+  screen.setFont(&FreeSans12pt7b);
+
+  //Create a progress bar control
+  DFRobot_UI::sBar_t &bar1 = ui.creatBar();
+  bar1.setStyle(DFRobot_UI::COLUMN);
+  bar1.fgColor = COLOR_RGB565_ORANGE;
+  bar1.setValue(20);
+  //bar1.setCallback(barCallback1);
+  ui.draw(&bar1,/*x=*/220,/*y=*/screen.height()/5*1);
+  ui.drawString(150, /*y=*/screen.height()/5*1, (char *)"login interface", COLOR_RGB565_CYAN, ui.bgColor, /*fontsize=*/1, 0);
+
+  DFRobot_UI::sBar_t &bar2 = ui.creatBar();
+  bar2.setStyle(DFRobot_UI::COLUMN);
+  bar2.fgColor = COLOR_RGB565_GREEN;
+  bar2.setValue(10);
+  //bar1.setCallback(barCallback1);
+  ui.draw(&bar2,/*x=*/33,/*y=*/screen.height()/5*3);
 
   /*
-
     // 1. Hardware Init
     screen.begin();
     screen.setRotation(1); // Landscape

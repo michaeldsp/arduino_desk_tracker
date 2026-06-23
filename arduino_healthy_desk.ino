@@ -1,158 +1,6 @@
-/*
-#include "DFRobot_C4002.h"
-
-DFRobot_C4002 c4002(&Serial1, 115200, 4, 5);
-
-void setup()
-{
-  Serial.begin(115200);
-
-  // Initialize the C4002 sensor
-  while (c4002.begin() != true) {
-    Serial.println("C4002 begin failed!");
-    delay(1000);
-  }
-  Serial.println("C4002 begin success!");
-  delay(50);
-
-  // Set the run led to off
-  if (c4002.setRunLedState(eLedOff)) {
-    Serial.println("Set run led success!");
-  } else {
-    Serial.println("Set run led failed!");
-  }
-  delay(50);
-
-  // Set the out led to off
-  if (c4002.setOutLedState(eLedOff)) {
-    Serial.println("Set out led success!");
-  } else {
-    Serial.println("Set out led failed!");
-  }
-  delay(50);
-
-  // Set the Resolution mode to 80cm.
-  if (c4002.setResolutionMode(eResolution80Cm)) {
-    Serial.println("Set resolution mode success!");
-  } else {
-    Serial.println("Set resolution mode failed!");
-  }
-  delay(50);
-
-  // Set the detect range to 0-1100 cm
-  uint16_t clostRange = 10;
-  uint16_t farRange   = 0;
-  if (c4002.setDetectRange(clostRange, farRange)) {    // Max detect range(0-1100cm)
-    Serial.println("Set detect range success!");
-  } else {
-    Serial.println("Set detect range failed!");
-  }
-  delay(50);
-
-  // Set the light threshold to 0 lux.range: 0-50 lux
-  if (c4002.setLightThresh(0)) {
-    Serial.println("Set light threshold success!");
-  } else {
-    Serial.println("Set light threshold failed!");
-  }
-  delay(50);
-
-  uint8_t gateState[15] = { C4002_ENABLE, C4002_ENABLE, C4002_ENABLE, C4002_ENABLE, C4002_ENABLE, C4002_ENABLE, C4002_ENABLE, C4002_ENABLE, C4002_ENABLE, C4002_ENABLE, C4002_ENABLE, C4002_ENABLE, C4002_ENABLE, C4002_ENABLE, C4002_ENABLE };
-  // Resolution mode:eResolution20Cm,This means that the number of 'distance gates' we can operate is 25
-  // uint8_t gateState[25] = {C4002_DISABLE,C4002_DISABLE,C4002_ENABLE,...,C4002_ENABLE,C4002_DISABLE};
-  if (c4002.configureGate(eMotionDistGate, gateState)) {    // Operation motion distance gate
-    Serial.println("Enable motion distance gate success!");
-  }
-  delay(50);
-  if (c4002.configureGate(ePresenceDistGate, gateState)) {    // Operation presence distance gate
-    Serial.println("Enable presence distance gate success!");
-  }
-  delay(50);
-
-  // Set the target disappear delay time to 1s，range: 0-65535s
-  if (c4002.setTargetDisappearDelay(1)) {
-    Serial.println("Set target disappear delay time success!");
-  } else {
-    Serial.println("Set target disappear delay time failed!");
-  }
-  delay(50);
-
-  // Set the report period to 10 * 0.1s = 1s
-  if (c4002.setReportPeriod(10)) {
-    Serial.println("Set report period success!");
-  } else {
-    Serial.println("Set report period failed!");
-  }
-
-}
-
-void loop()
-{
-  // Get all the results of the C4002 sensor,Default loop execution
-  sRetResult_t retResult = c4002.getNoteInfo();
-
-  if (retResult.noteType == eResult) {
-    Serial.println("------- Get all results --------");
-    // get the light intensity
-    float light = c4002.getLightIntensity();
-    Serial.print("Light: ");
-    Serial.print(light);
-    Serial.println(" lux");
-
-    // get Target state
-    eTargetState_t targetState = c4002.getTargetState();
-    Serial.print("Target state: ");
-    if (targetState == eNoTarget) {
-      Serial.println("No Target");
-    } else if (targetState == ePresence) {
-      Serial.println("Static Presence");
-    } else if (targetState == eMotion) {
-      Serial.println("Motion");
-    }
-
-    // get presence count down
-    uint16_t presenceGateCount = c4002.getPresenceCountDown();
-    Serial.print("Presence distance gate count down: ");
-    Serial.print(presenceGateCount);
-    Serial.println(" s");
-
-    // get Presence distance gate target info
-    sPresenceTarget_t presenceTarget = c4002.getPresenceTargetInfo();
-    Serial.print("Presence distance: ");
-    Serial.print(presenceTarget.distance);
-    Serial.println(" m");
-    Serial.print("Presence energy: ");
-    Serial.println(presenceTarget.energy);
-
-    // get motion distance gate index
-    sMotionTarget_t motionTarget = c4002.getMotionTargetInfo();
-    Serial.print("Motion distance: ");
-    Serial.print(motionTarget.distance);
-    Serial.println(" m");
-    Serial.print("Motion energy: ");
-    Serial.println(motionTarget.energy);
-    Serial.print("Motion speed: ");
-    Serial.print(motionTarget.speed);
-    Serial.println(" m/s");
-    Serial.print("Motion direction: ");
-    if (motionTarget.direction == eAway) {
-      Serial.println("Away!");
-    } else if (motionTarget.direction == eNoDirection) {
-      Serial.println("No Direction!");
-    } else if (motionTarget.direction == eApproaching) {
-      Serial.println("Approaching!");
-    }
-    Serial.println("--------------------------------");
-  }
-  delay(50);
-}
-*/
 #include "DFRobot_C4002.h"
 #include <WiFi.h>
 #include <PubSubClient.h>
-
-// Define the pins for ESP32-C5 (Change if your wiring differs)
-DFRobot_C4002 c4002(&Serial1, 115200, /*RX*/ A3, /*TX*/ A4);
 
 // Replace with your network credentials
 const char* ssid     = "DSPiot";
@@ -167,6 +15,7 @@ const char* timer_discovery_topic = "homeassistant/sensor/c4002_presence_time/co
 const char* timer_state_topic     = "homeassistant/sensor/c4002_presence_time/state";
 const char* timerabsent_discovery_topic     = "homeassistant/sensor/c4002_absent_time/config";
 const char* timerabsent_state_topic     = "homeassistant/sensor/c4002_absent_time/state";
+bool calibrate = false;
 
 // Global variables for tracking state
 eTargetState_t lastState = eNoTarget;
@@ -267,39 +116,28 @@ void setup() {
   // Setup MQTT (Discovery for HA)
   setup_mqtt();
 
-  // init c4002
-  while (c4002.begin() != true) {
-    Serial.println("C4002 begin failed!");
-    delay(1000);
+  // Initalise the c4002
+  init_c4002();
+
+  // Calibrate
+  if (calibrate) {
+    c4002_start_calibration();
   }
 
-  // Minimal Setup for Presence Detection
-  c4002.setRunLedState(eLedOff);
-  delay(50);
-  c4002.setOutLedState(eLedOff);
-  delay(50);
-  c4002.setResolutionMode(eResolution80Cm);
-  delay(50);
-  c4002.setDetectRange(5, 100); // 10cm to 5m - adjust as needed
-  delay(50);
-  c4002.setTargetDisappearDelay(1); 
-  delay(50);
-  c4002.setReportPeriod(10); // 1s reports
-  delay(50);
-  c4002.setLightThresh(0); // ignore light
-  delay(50);
-  lastha = 0;
-
-  Serial.println("Monitoring for Human Presence...");
-  Serial.println("Time(s) | Event");
-  Serial.println("-------------------------");
 }
 
 void loop() {
-  sRetResult_t retResult = c4002.getNoteInfo();
+  // c4002 sensor calibration happening
+  if (calibrate) {
+    calibration_loop();
+    delay(100);
+    return;
+  }
+  sRetResult_t retResult = c4002_getNoteInfo();
 
   if (retResult.noteType == eResult) {
-    eTargetState_t currentState = c4002.getTargetState();
+    eTargetState_t currentState = c4002_getTargetState();
+    sPresenceTarget_t target = c4002_getPresenceTargetInfo();
     
     // Calculate running seconds
     unsigned long runningSeconds = millis() / 1000;
@@ -312,9 +150,16 @@ void loop() {
       Serial.print(runningSeconds);
       Serial.print("s] STATUS: Human Detected (");
       Serial.print(currentState == eMotion ? "Motion" : "Static");
+      Serial.print(") distance=(");
+      Serial.print(target.distance);
+      Serial.print(") energy=(");
+      Serial.print(target.energy);
       Serial.print(") interval=");
       Serial.print(diff);
       Serial.println();
+      // Light up screen
+      screenOn();
+
       timeLastChanged = runningSeconds;
       if (WiFi.status() == WL_CONNECTED) { 
         client.publish(state_topic, "ON");
@@ -333,6 +178,8 @@ void loop() {
       Serial.print(diff);
       Serial.println();
       timeLastChanged = runningSeconds;
+      // Light up screen
+      screenOff();
 
       // If WIFI UP we can do things
       if (WiFi.status() == WL_CONNECTED) { 
@@ -343,7 +190,6 @@ void loop() {
     }
 
     // update HA every 10 seconds of prescense
-    
     if (WiFi.status() == WL_CONNECTED && (runningSeconds - lastha) >= 10) {
       int diff = (runningSeconds - timeLastChanged);
       if (currentState == eMotion || currentState == ePresence) {
@@ -351,7 +197,11 @@ void loop() {
         client.publish(state_topic, "ON");
         Serial.print("update HA occupied running=");
         Serial.print(runningSeconds);
-        Serial.print(" lastha=");
+        Serial.print(") distance=(");
+        Serial.print(target.distance);
+        Serial.print(") energy=(");
+        Serial.print(target.energy);
+        Serial.print(") lastha=");
         Serial.println(lastha);
       } else {
         client.publish(timerabsent_state_topic, String(diff).c_str());
