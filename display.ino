@@ -111,6 +111,84 @@ static void drawBar(int16_t x, int16_t y, int16_t w, int16_t h, float frac, uint
   if (fill < innerW)   screen.fillRect(x + 2 + fill, y + 2, innerW - fill, h - 4, COL_BG);
 }
 
+// Small amber "searching" eye, shown when the sensor has briefly lost me.
+// open=false draws a closed eye so it blinks when toggled each second.
+static void drawEye(int16_t cx, int16_t cy, bool open) {
+  screen.fillRect(cx - 20, cy - 16, 40, 32, COL_BG);   // clear its box
+  uint16_t c = COL_WARN;
+  if (open) {
+    // almond lids
+    screen.drawLine(cx - 16, cy, cx, cy - 9, c);
+    screen.drawLine(cx, cy - 9, cx + 16, cy, c);
+    screen.drawLine(cx - 16, cy, cx, cy + 9, c);
+    screen.drawLine(cx, cy + 9, cx + 16, cy, c);
+    screen.drawCircle(cx, cy, 6, c);     // iris
+    screen.fillCircle(cx, cy, 3, c);     // pupil
+  } else {
+    screen.drawLine(cx - 16, cy, cx + 16, cy, c);   // closed
+  }
+}
+
+// Colour for a single timeline minute-state (0..4)
+static uint16_t timelineColor(uint8_t st) {
+  switch (st) {
+    case 1: return COLOR_RGB565_GREEN;    // present, working hours
+    case 2: return COLOR_RGB565_DGREEN;   // present, off hours
+    case 3: return COLOR_RGB565_RED;      // away, working hours
+    case 4: return COLOR_RGB565_MAROON;   // away, off hours
+    default: return COLOR_RGB565_DGRAY;   // not reached yet
+  }
+}
+
+// "Severity" so a pixel covering several minutes never hides an away-in-work blip
+static uint8_t timelineRank(uint8_t st) {
+  switch (st) {
+    case 3: return 4;   // away/work  (most important to show)
+    case 1: return 3;   // present/work
+    case 4: return 2;   // away/off
+    case 2: return 1;   // present/off
+    default: return 0;  // unknown
+  }
+}
+
+// Draw the day timeline with 08:00 / 17:00 markers. The window starts at the
+// first minute I was present today and runs to midnight, so the active part of
+// the day fills the whole bar (rather than wasting space on the small hours).
+static void drawTimeline(int16_t x, int16_t y, int16_t w, int16_t h) {
+  screen.drawRect(x, y, w, h, COL_DIM);
+  int16_t ix = x + 1, iy = y + 1, iw = w - 2, ih = h - 2;
+
+  // First minute I was present today defines the left edge of the window
+  int startMin = 0;
+  for (int m = 0; m < 1440; m++) {
+    if (dayTimeline[m] == 1 || dayTimeline[m] == 2) { startMin = m; break; }
+  }
+  int winLen = 1440 - startMin;
+  if (winLen < 1) winLen = 1;
+
+  for (int px = 0; px < iw; px++) {
+    // minutes this pixel column represents within the window
+    int mStart = startMin + (int)((long)px * winLen / iw);
+    int mEnd   = startMin + (int)((long)(px + 1) * winLen / iw);
+    if (mEnd <= mStart) mEnd = mStart + 1;
+    if (mEnd > 1440) mEnd = 1440;
+
+    uint8_t best = 0;
+    for (int m = mStart; m < mEnd; m++) {
+      if (timelineRank(dayTimeline[m]) > timelineRank(best)) best = dayTimeline[m];
+    }
+    screen.drawFastVLine(ix + px, iy, ih, timelineColor(best));
+  }
+
+  // Working-hours markers, remapped into the window (skipped if before it)
+  int markMins[2] = { DAY_START_HOUR * 60, DAY_END_HOUR * 60 };
+  for (int i = 0; i < 2; i++) {
+    if (markMins[i] < startMin || markMins[i] > 1440) continue;
+    int16_t mx = ix + (int16_t)((long)(markMins[i] - startMin) * iw / winLen);
+    screen.drawFastVLine(mx, y - 2, h + 4, COLOR_RGB565_WHITE);
+  }
+}
+
 // ---- layout (computed from SW/SH so it adapts to the rotation) -----------
 
 #define SESS_TIME_Y   70
@@ -129,7 +207,8 @@ static char pBreak[16] = "";
 static char pAway[16]  = "";
 static int  pWorkPct   = -1;
 static int  pSessPct   = -1;
-static int  pDeskPct   = -1;
+static int  pEye       = -1;     // 0/1: searching-eye drawn last refresh
+static int  pTimelineMin = -2;   // last minute index drawn into the 24h view
 static int  pAlert     = -1;     // -1 unknown, 0 off, 1 on
 static bool dashFresh  = true;   // force a full repaint after a static redraw
 
@@ -222,6 +301,15 @@ void display_dashboard_update() {
     pSessPct = sessPct;
   }
 
+  // --- "searching" eye to the right of the timer while the sensor lost me ---
+  int eye = uiSearching ? 1 : 0;
+  if (eye) {
+    drawEye(SW - 55, SESS_TIME_Y + 20, blink);    // blinks open/closed each second
+  } else if (force || pEye != 0) {
+    screen.fillRect(SW - 75, SESS_TIME_Y + 4, 40, 32, COL_BG);   // clear when gone
+  }
+  pEye = eye;
+
   // --- today at desk (value + bar) ---
   fmtHM(uiTodayDeskSec, buf);
   if (force || strcmp(pDesk, buf) != 0) {
@@ -230,11 +318,10 @@ void display_dashboard_update() {
     drawText(SW - 10 - vw, DESK_LBL_Y, 2, COL_TEXT, buf);
     strcpy(pDesk, buf);
   }
-  int deskPct = (int)(100.0f * uiTodayDeskSec / (DAILY_GOAL_MIN * 60UL));
-  if (deskPct > 100) deskPct = 100;
-  if (force || deskPct != pDeskPct) {
-    drawBar(20, DESK_BAR_Y, SW - 40, 22, deskPct / 100.0f, COL_OK);
-    pDeskPct = deskPct;
+  // 24h timeline replaces the old progress bar; redraws once a minute
+  if (force || uiDayMinute != pTimelineMin) {
+    drawTimeline(20, DESK_BAR_Y, SW - 40, 22);
+    pTimelineMin = uiDayMinute;
   }
 
   // --- footer columns: last break / today away / % away (working hours) ---
