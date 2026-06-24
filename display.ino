@@ -203,8 +203,9 @@ static void drawTimeline(int16_t x, int16_t y, int16_t w, int16_t h) {
 static char pClock[8]  = "";
 static char pSess[8]   = "";
 static char pDesk[16]  = "";
-static char pBreak[16] = "";
-static char pAway[16]  = "";
+static char pBreak[16]   = "";
+static char pAway[16]    = "";
+static char pPresent[16] = "";
 static int  pWorkPct   = -1;
 static int  pSessPct   = -1;
 static int  pEye       = -1;     // 0/1: searching-eye drawn last refresh
@@ -229,6 +230,13 @@ void display_init() {
   screenOff();               // stay dark until presence is detected
 }
 
+// Boot/status splash shown during the startup sequence (WiFi, time, MQTT...)
+void display_boot_status(const char* msg) {
+  screen.fillScreen(COL_BG);
+  drawCentered(SH / 2 - 30, 3, COL_LABEL, "HEALTHY DESK");
+  drawCentered(SH / 2 + 15, 2, COL_TEXT, msg);
+}
+
 // Full "welcome back" splash shown when the user returns to the desk
 void display_welcome_back(unsigned long awaySec) {
   char buf[24];
@@ -251,7 +259,7 @@ void display_dashboard_static() {
   // Fixed labels for the lower blocks (footer is three even columns)
   drawText(10, DESK_LBL_Y, 2, COL_LABEL, "TODAY AT DESK");
   drawText(10,             FOOT_LBL_Y, 2, COL_LABEL, "LAST BREAK");
-  drawText(SW / 3 + 5,     FOOT_LBL_Y, 2, COL_LABEL, "TODAY AWAY");
+  drawText(SW / 3 + 5,     FOOT_LBL_Y, 2, COL_LABEL, "TODAY");
   drawText(2 * SW / 3 + 5, FOOT_LBL_Y, 2, COL_LABEL, "% AWAY");
 }
 
@@ -333,11 +341,20 @@ void display_dashboard_update() {
     drawText(10, FOOT_VAL_Y, 3, COL_BREAK, buf);
     strcpy(pBreak, buf);
   }
+  // TODAY column: "<away> away" (orange) above "<present> here" (green).
   fmtHM(uiTodayAwaySec, buf);
   if (force || strcmp(pAway, buf) != 0) {
-    clearRect(cw + 5, FOOT_VAL_Y, cw - 7, 24);
-    drawText(cw + 5, FOOT_VAL_Y, 3, COL_WARN, buf);
+    clearRect(cw + 5, FOOT_VAL_Y, cw - 7, 18);
+    drawText(cw + 5, FOOT_VAL_Y, 2, COL_WARN, buf);
+    drawText(cw + 5 + (int16_t)strlen(buf) * 12 + 4, FOOT_VAL_Y, 2, COL_WARN, "away");
     strcpy(pAway, buf);
+  }
+  fmtHM(uiTodayDeskSec, buf);
+  if (force || strcmp(pPresent, buf) != 0) {
+    clearRect(cw + 5, FOOT_VAL_Y + 18, cw - 7, 18);
+    drawText(cw + 5, FOOT_VAL_Y + 18, 2, COL_OK, buf);
+    drawText(cw + 5 + (int16_t)strlen(buf) * 12 + 4, FOOT_VAL_Y + 18, 2, COL_OK, "here");
+    strcpy(pPresent, buf);
   }
   if (force || uiWorkAwayPct != pWorkPct) {
     sprintf(buf, "%d%%", uiWorkAwayPct);

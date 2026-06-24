@@ -286,6 +286,10 @@ void setup() {
   Serial.print("Connecting to: ");
   Serial.println(ssid);
 
+  // Show a status splash so the boot delay isn't a blank screen
+  screenOn();
+  display_boot_status("Connecting to WiFi...");
+
   // Register the event handler before starting WiFi
   WiFi.onEvent(WiFiEvent);
   // Start the connection
@@ -319,6 +323,7 @@ void setup() {
 
   // Sync the clock (used for the on-screen time, the midnight reset, and to
   // tell whether a restored snapshot belongs to today). Wait briefly for NTP.
+  display_boot_status("Syncing time...");
   configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, "pool.ntp.org");
   Serial.print("Syncing time");
   unsigned long tStart = millis();
@@ -329,6 +334,7 @@ void setup() {
   Serial.println();
 
   // Setup MQTT (Discovery for HA + subscribe to the retained totals)
+  display_boot_status("Connecting to broker...");
   setup_mqtt();
 
   // Wait for the broker to replay the retained snapshot, then stop listening
@@ -336,6 +342,7 @@ void setup() {
   // message arrives, so this only ever waits the full time on a first-ever boot
   // (when no snapshot exists yet) -- normal reboots restore in milliseconds.
   Serial.println("Restoring saved state from MQTT...");
+  display_boot_status("Restoring data...");
   unsigned long rStart = millis();
   while (!(persistLoaded && timelineLoaded) && millis() - rStart < 5000) {
     client.loop();
@@ -356,6 +363,9 @@ void setup() {
 
   // Start "away" from now so the first detection shows a sane break length
   absenceStartSec = millis() / 1000;
+
+  // Boot finished: go dark until presence is detected
+  screenOff();
 }
 
 // Refresh the on-screen clock and reset the daily totals at local midnight
