@@ -111,21 +111,28 @@ static void drawBar(int16_t x, int16_t y, int16_t w, int16_t h, float frac, uint
   if (fill < innerW)   screen.fillRect(x + 2 + fill, y + 2, innerW - fill, h - 4, COL_BG);
 }
 
-// Small amber "searching" eye, shown when the sensor has briefly lost me.
+// Large amber "searching" eye, shown when the sensor has briefly lost me.
 // open=false draws a closed eye so it blinks when toggled each second.
 static void drawEye(int16_t cx, int16_t cy, bool open) {
-  screen.fillRect(cx - 20, cy - 16, 40, 32, COL_BG);   // clear its box
+  screen.fillRect(cx - 34, cy - 22, 68, 44, COL_BG);   // clear its box
   uint16_t c = COL_WARN;
+  const int16_t hw = 30;   // half-width of the eye
+  const int16_t hh = 18;   // lid height
   if (open) {
-    // almond lids
-    screen.drawLine(cx - 16, cy, cx, cy - 9, c);
-    screen.drawLine(cx, cy - 9, cx + 16, cy, c);
-    screen.drawLine(cx - 16, cy, cx, cy + 9, c);
-    screen.drawLine(cx, cy + 9, cx + 16, cy, c);
-    screen.drawCircle(cx, cy, 6, c);     // iris
-    screen.fillCircle(cx, cy, 3, c);     // pupil
+    // bold almond lids (drawn a few times offset for thickness)
+    for (int16_t d = -1; d <= 1; d++) {
+      screen.drawLine(cx - hw, cy + d, cx, cy - hh + d, c);
+      screen.drawLine(cx, cy - hh + d, cx + hw, cy + d, c);
+      screen.drawLine(cx - hw, cy + d, cx, cy + hh + d, c);
+      screen.drawLine(cx, cy + hh + d, cx + hw, cy + d, c);
+    }
+    screen.drawCircle(cx, cy, 13, c);    // iris (thick ring)
+    screen.drawCircle(cx, cy, 12, c);
+    screen.fillCircle(cx, cy, 6, c);     // pupil
   } else {
-    screen.drawLine(cx - 16, cy, cx + 16, cy, c);   // closed
+    // closed: a bold horizontal line
+    for (int16_t d = -1; d <= 1; d++)
+      screen.drawLine(cx - hw, cy + d, cx + hw, cy + d, c);
   }
 }
 
@@ -237,6 +244,21 @@ void display_boot_status(const char* msg) {
   drawCentered(SH / 2 + 15, 2, COL_TEXT, msg);
 }
 
+// Friendly greeting shown the first time I'm seen each day (instead of a break)
+void display_good_morning() {
+  const char* greet = "GOOD MORNING";
+  time_t now = time(nullptr);
+  if (now > 100000) {
+    struct tm t;
+    localtime_r(&now, &t);
+    if (t.tm_hour >= 17)      greet = "GOOD EVENING";
+    else if (t.tm_hour >= 12) greet = "GOOD AFTERNOON";
+  }
+  screen.fillScreen(COL_BG);
+  drawCentered(SH / 2 - 40, 4, COL_OK,   greet);
+  drawCentered(SH / 2 + 20, 2, COL_TEXT, "Have a great day!");
+}
+
 // Full "welcome back" splash shown when the user returns to the desk
 void display_welcome_back(unsigned long awaySec) {
   char buf[24];
@@ -314,7 +336,7 @@ void display_dashboard_update() {
   if (eye) {
     drawEye(SW - 55, SESS_TIME_Y + 20, blink);    // blinks open/closed each second
   } else if (force || pEye != 0) {
-    screen.fillRect(SW - 75, SESS_TIME_Y + 4, 40, 32, COL_BG);   // clear when gone
+    screen.fillRect(SW - 89, SESS_TIME_Y - 2, 68, 44, COL_BG);   // clear when gone
   }
   pEye = eye;
 

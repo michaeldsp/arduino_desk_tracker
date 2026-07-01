@@ -54,6 +54,7 @@ unsigned long dailyAbsenceSec  = 0;   // completed away time so far today
 unsigned long lastBreakSec     = 0;   // length of the most recent completed break
 unsigned long lastSessionSec   = 0;   // length of the most recent completed session
 int trackedYDay = -1;                 // day-of-year, used to reset at midnight
+bool seenToday = false;               // have I been present at least once today?
 
 // Debounce for arriving: detection must persist before we count it as present
 bool          candidate         = false;
@@ -181,12 +182,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     dailyPresenceSec = (unsigned long)desk;
     dailyAbsenceSec  = (unsigned long)away;
     workAbsenceSec   = (unsigned long)workaway;
+    seenToday = (desk > 0);          // already been present today?
     trackedYDay = today;
   } else {
     // Snapshot is from another day (or clock unknown): start the day fresh
     dailyPresenceSec = 0;
     dailyAbsenceSec  = 0;
     workAbsenceSec   = 0;
+    seenToday = false;
     if (today >= 0) trackedYDay = today;
   }
   lastBreakSec = (unsigned long)lastbreak;
@@ -387,6 +390,7 @@ void update_clock_and_day() {
     dailyPresenceSec = 0;
     dailyAbsenceSec  = 0;
     workAbsenceSec   = 0;
+    seenToday = isPresent;        // away doesn't count until first presence today
     memset(dayTimeline, 0, sizeof(dayTimeline));   // clear the 24h view
     lastTimelineMin = -1;
     unsigned long nowSec = millis() / 1000;
@@ -497,8 +501,15 @@ void loop() {
           // Break ended when I actually arrived, not when it was confirmed
           unsigned long awayDur =
               candidateStartSec > absenceStartSec ? candidateStartSec - absenceStartSec : 0;
-          dailyAbsenceSec += awayDur;
-          lastBreakSec = awayDur;
+          bool firstToday = !seenToday;
+          if (seenToday) {
+            // A genuine break between sessions today: count it
+            dailyAbsenceSec += awayDur;
+            lastBreakSec = awayDur;
+          } else {
+            // First presence of the day: the time before I arrived isn't a break
+            seenToday = true;
+          }
           isPresent = true;
           candidate = false;
           sessionStartSec = candidateStartSec;  // count session from arrival
@@ -511,15 +522,18 @@ void loop() {
 
           // Wake the screen and greet the user
           screenOn();
-          display_welcome_back(awayDur);
+          if (firstToday) display_good_morning();     // first time seen today
+          else            display_welcome_back(awayDur);
           displayMode = MODE_WELCOME;
           welcomeUntilMs = millis() + WELCOME_MS;
           transitioned = true;
 
           if (WiFi.status() == WL_CONNECTED) {
+            // First arrival has no "break" to report, so publish 0 absent
+            String absentPayload = firstToday ? String(0) : String(awayDur);
             client.publish(state_topic, "ON");
             client.publish(timer_state_topic, "0");
-            client.publish(timerabsent_state_topic, String(awayDur).c_str());
+            client.publish(timerabsent_state_topic, absentPayload.c_str());
           }
         }
       } else {
@@ -596,7 +610,8 @@ void loop() {
   } else {
     uiSessionSec   = 0;
     uiTodayDeskSec = dailyPresenceSec;
-    uiTodayAwaySec = dailyAbsenceSec + (nowSec - absenceStartSec);
+    // Away only counts once I've been present today (ignore the overnight/pre-arrival gap)
+    uiTodayAwaySec = seenToday ? dailyAbsenceSec + (nowSec - absenceStartSec) : 0;
     uiBreakAlert   = false;
   }
   uiLastBreakSec = lastBreakSec;
